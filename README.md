@@ -1,1 +1,1 @@
-# FNGetKey
+# FakeNinjaWebKey

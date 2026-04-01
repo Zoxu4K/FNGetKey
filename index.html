@@ -54,6 +54,33 @@
   .info-row{display:flex;gap:8px;font-size:12px;color:var(--dim);align-items:flex-start}
   .dot-sm{width:4px;height:4px;border-radius:50%;background:var(--dim);flex-shrink:0;margin-top:5px}
   .footer{text-align:center;font-size:9px;color:#1e1e24;letter-spacing:1px;margin-top:4px}
+
+  /* ── Short code redeem UI ── */
+  .redeem-box{display:none;flex-direction:column;gap:10px}
+  .redeem-box.show{display:flex}
+  .redeem-label{font-size:9px;font-family:'Share Tech Mono',monospace;color:var(--dim);letter-spacing:2px;text-align:center;margin-bottom:2px}
+  .redeem-tabs{display:flex;gap:6px;margin-bottom:4px}
+  .tab-btn{flex:1;padding:9px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--dim);font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .15s;text-transform:uppercase}
+  .tab-btn.active-tab{border-color:var(--accent);color:var(--accent);background:rgba(0,229,255,.05)}
+  .tab-btn.active-tab-warn{border-color:var(--warn);color:var(--warn);background:rgba(255,187,0,.05)}
+  .code-input{background:#000;border:1px solid var(--border);border-radius:6px;padding:14px;font-family:'Share Tech Mono',monospace;font-size:20px;color:#fff;text-align:center;letter-spacing:4px;width:100%;outline:none;text-transform:uppercase;transition:border-color .2s}
+  .code-input:focus{border-color:var(--accent)}
+  .code-hint{font-size:9px;font-family:'Share Tech Mono',monospace;color:var(--dim);text-align:center;letter-spacing:1px;margin-top:-4px}
+  .btn-redeem{background:var(--green);color:#000}
+  .btn-redeem:hover{filter:brightness(1.1)}
+  .btn-redeem.loading-r{opacity:.5;pointer-events:none}
+
+  /* ── Short code DISPLAY (step 3/4 FNLink) ── */
+  .sc-display{display:none;flex-direction:column;gap:12px}
+  .sc-display.show{display:flex}
+  .sc-code{background:#000;border:2px solid var(--green);border-radius:8px;padding:20px;font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--green);text-align:center;letter-spacing:6px;animation:glow-g 2s infinite;word-break:break-all}
+  @keyframes glow-g{0%,100%{box-shadow:0 0 16px rgba(0,255,136,.15)}50%{box-shadow:0 0 32px rgba(0,255,136,.35)}}
+  .sc-timer{font-family:'Share Tech Mono',monospace;font-size:13px;text-align:center;color:var(--dim);letter-spacing:2px}
+  .sc-dur{font-size:10px;font-family:'Share Tech Mono',monospace;color:var(--warn);text-align:center;letter-spacing:2px;margin-top:2px}
+  .sc-hint{font-size:11px;color:var(--dim);font-family:'Share Tech Mono',monospace;text-align:center;line-height:1.7}
+  .btn-copy-sc{background:var(--green);color:#000}
+  .btn-copy-sc:hover{filter:brightness(1.1)}
+  .btn-copy-sc.copied{background:var(--accent);pointer-events:none}
 </style>
 </head>
 <body>
@@ -62,21 +89,41 @@
     <div class="logo">FAKE <span>NINJA</span></div>
     <div class="sub">FREE KEY — 3H OR 6H SESSION</div>
   </div>
+
   <div class="card">
-    <div class="card-label">Your Key</div>
+    <div class="card-label" id="card-main-label">Your Key</div>
+
+    <!-- STATE: pilih durasi + redeem short code -->
     <div id="s-get">
-      <div class="dur-label">CHOOSE YOUR SESSION DURATION</div>
+      <div class="dur-label">CHOOSE SESSION DURATION</div>
       <div class="btn-row">
         <a class="btn btn-get" id="btn-get-3h" href="#" onclick="return onClickGet(3)" style="flex:1">3 HOURS</a>
         <a class="btn btn-get-6h" id="btn-get-6h" href="#" onclick="return onClickGet(6)" style="flex:1">6 HOURS</a>
       </div>
-      <div class="status">Choose duration, complete the task, key appears automatically.</div>
+      <div class="status" id="st-get-hint">Choose duration → complete the task → redeem your short code here.</div>
+
+      <!-- Redeem section -->
+      <div style="border-top:1px solid var(--border);margin:14px 0 0 0;padding-top:14px">
+        <div class="redeem-label">HAVE A SHORT CODE? REDEEM HERE</div>
+        <div class="redeem-tabs" style="margin-top:8px">
+          <button class="tab-btn active-tab-warn" id="tab-3h" onclick="setRedeemTab(3)">3H CODE (6 DIGITS)</button>
+          <button class="tab-btn" id="tab-6h" onclick="setRedeemTab(6)">6H CODE (9 DIGITS)</button>
+        </div>
+        <input class="code-input" id="code-input" maxlength="9" placeholder="——————" oninput="onCodeInput()" autocomplete="off" spellcheck="false"/>
+        <div class="code-hint" id="code-hint">Enter your 6-digit short code (3H session)</div>
+        <button class="btn btn-redeem" id="btn-redeem" onclick="doRedeem()" style="margin-top:8px">REDEEM CODE</button>
+      </div>
+      <div class="status err" id="st-err" style="display:none"></div>
     </div>
+
+    <!-- STATE: loading -->
     <div class="loader" id="s-load">
       <div class="spin"></div>
       <div class="loader-txt" id="load-txt">VERIFYING...</div>
-      <div class="loader-sub" id="load-sub">Verifying your Linkvertise task</div>
+      <div class="loader-sub" id="load-sub">Please wait</div>
     </div>
+
+    <!-- STATE: key aktif -->
     <div class="key-wrap" id="s-key">
       <div class="key-value" id="kv">—</div>
       <div class="key-timer" id="kcd" style="color:var(--green)">03:00:00</div>
@@ -84,98 +131,62 @@
       <button class="btn btn-copy" id="btn-copy" onclick="copyKey()">COPY KEY</button>
       <div class="status ok">Paste this key into the Fake Ninja app.</div>
     </div>
+
+    <!-- STATE: short code display (dari step FNLink) -->
+    <div class="sc-display" id="s-sc">
+      <div class="sc-code" id="sc-val">——————</div>
+      <div class="sc-dur" id="sc-dur">3-HOUR SESSION CODE</div>
+      <div class="sc-timer" id="sc-timer">CODE EXPIRES IN 15:00</div>
+      <button class="btn btn-copy-sc" id="btn-copy-sc" onclick="copyShortCode()">COPY CODE</button>
+      <div class="sc-hint">Copy this code, then go to<br><b>Get Key page</b> → Redeem Code → paste it there.</div>
+    </div>
+
+    <!-- STATE: active key (sudah punya key aktif) -->
     <div class="active-box" id="s-active">
       <p>You still have an active key.<br>Wait until it expires before generating a new one.</p>
       <div class="key-timer" id="acd" style="color:var(--warn)">—</div>
     </div>
+
+    <!-- STATE: cooldown -->
     <div class="cooldown-box" id="s-cooldown">
       <p>Please wait before generating a new key.</p>
       <div class="key-timer" id="ccd" style="color:var(--red)">—</div>
       <p style="font-size:10px;opacity:.6">Cooldown: 10 minutes after key expires.</p>
     </div>
-    <div class="status err" id="st-err" style="display:none"></div>
-  </div>
-
-  <!-- REDEEM SHORT CODE CARD -->
-  <div class="card" id="card-redeem">
-    <div class="card-label">Redeem Short Code</div>
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <div style="font-size:11px;color:var(--dim);font-family:'Share Tech Mono',monospace;line-height:1.6">
-        Masukkan short code dari step 3/4 Linkvertise.<br>
-        3 jam = 6 karakter &nbsp;|&nbsp; 6 jam = 9 karakter
-      </div>
-      <input id="inp-code" type="text" maxlength="9"
-        placeholder="XXXXXX / XXXXXXXXX"
-        style="background:#000;border:1px solid var(--border);border-radius:6px;padding:14px;
-               font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--accent);
-               text-align:center;letter-spacing:4px;text-transform:uppercase;width:100%;
-               outline:none;transition:border-color .2s"
-        oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"
-        onfocus="this.style.borderColor='var(--accent)'"
-        onblur="this.style.borderColor='var(--border)'"
-      />
-      <div style="display:flex;gap:8px">
-        <button class="btn" id="btn-redeem" onclick="doRedeem()"
-          style="flex:1;background:transparent;border:1px solid var(--green);color:var(--green)">
-          REDEEM
-        </button>
-        <button class="btn" id="btn-paste" onclick="pasteCode()"
-          style="flex:0 0 auto;width:52px;background:transparent;border:1px solid var(--border);color:var(--dim);font-size:18px;padding:0">
-          📋
-        </button>
-      </div>
-      <div class="status" id="st-redeem"></div>
-      <div id="auto-bar" style="display:none;flex-direction:column;gap:6px;text-align:center">
-        <div style="font-size:10px;color:var(--dim);font-family:'Share Tech Mono',monospace;letter-spacing:2px">CODE TERDETEKSI — AUTO REDEEM DALAM</div>
-        <div id="auto-cd" style="font-family:'Share Tech Mono',monospace;font-size:26px;font-weight:700;color:var(--warn)">30</div>
-        <button class="btn" onclick="cancelAuto()"
-          style="background:transparent;border:1px solid var(--dim);color:var(--dim);padding:8px;font-size:11px">
-          BATAL
-        </button>
-      </div>
-    </div>
   </div>
 
   <div class="card">
-    <div class="card-label">Rules</div>
+    <div class="card-label">How It Works</div>
     <div class="info">
-      <div class="info-row"><div class="dot-sm"></div><span>Key is valid for <b>3 hours</b> (1x task) or <b>6 hours</b> (2x task) per session.</span></div>
-      <div class="info-row"><div class="dot-sm"></div><span>1 key = 1 device — cannot be used on another device.</span></div>
-      <div class="info-row"><div class="dot-sm"></div><span>While a key is active, you cannot generate a new one.</span></div>
-      <div class="info-row"><div class="dot-sm"></div><span>After key expires, wait <b>10 minutes</b> before generating a new key.</span></div>
-      <div class="info-row"><div class="dot-sm"></div><span>You must complete the Linkvertise task to receive a key.</span></div>
+      <div class="info-row"><div class="dot-sm"></div><span>Choose <b>3H</b> or <b>6H</b> → complete Linkvertise task.</span></div>
+      <div class="info-row"><div class="dot-sm"></div><span>After task done, you'll get a <b>short code</b> (6 digits for 3H, 9 digits for 6H).</span></div>
+      <div class="info-row"><div class="dot-sm"></div><span>Come back here → enter your short code → tap Redeem.</span></div>
+      <div class="info-row"><div class="dot-sm"></div><span>1 key = 1 device. While key is active, cannot generate new one.</span></div>
+      <div class="info-row"><div class="dot-sm"></div><span>After key expires, wait <b>10 minutes</b> before getting a new key.</span></div>
     </div>
   </div>
   <div class="footer">t.me/fakelagreborn</div>
 </div>
 <script>
 // ================================================================
-const SERVER_URL  = "https://fn-key-server.vercel.app/api/key";
-const LV_URL_3H   = "https://link-target.net/4356401/8zwWVVulhEEO";   // ← Link Linkvertise untuk 3 jam
-const LV_URL_6H   = "https://direct-link.net/4356401/UZlFV2AdHH7w";   // ← Link untuk 6 jam
-const STORE_KEY   = "fn_active_session";
-const STORE_COOL  = "fn_cooldown";
+const SERVER_URL = "https://fn-key-server.vercel.app/api/key";
+const LV_URL_3H  = "https://link-target.net/4356401/8zwWVVulhEEO";
+const LV_URL_6H  = "https://direct-link.net/4356401/UZlFV2AdHH7w";
+const STORE_KEY  = "fn_active_session";
+const STORE_COOL = "fn_cooldown";
 // ================================================================
 
-let pickedKey = null, cdInterval = null, acInterval = null, coolInterval = null;
+let pickedKey = null, scCode = null, redeemHours = 3;
+let cdInterval = null, acInterval = null, coolInterval = null, scInterval = null;
 
 function getFingerprint() {
-  // Cek apakah sudah tersimpan di localStorage agar stable antar reload
   const stored = localStorage.getItem('fn_fp');
   if (stored && stored.startsWith('FP')) return stored;
-  // Gunakan komponen yang lebih stabil (hindari userAgent yang bisa berubah di WebView)
-  const raw = [
-    navigator.language || '',
-    navigator.hardwareConcurrency || 0,
-    screen.width + 'x' + screen.height,
-    screen.colorDepth || 0,
-    new Date().getTimezoneOffset()
-  ].join('|');
-  let h = 0;
-  for (let i = 0; i < raw.length; i++) { h = ((h << 5) - h) + raw.charCodeAt(i); h |= 0; }
-  // Tambah suffix random agar unik per browser instance
-  const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
-  const fp = 'FP' + Math.abs(h).toString(16).toUpperCase().padStart(8, '0') + rand;
+  const raw = [navigator.language||'',navigator.hardwareConcurrency||0,
+    screen.width+'x'+screen.height,screen.colorDepth||0,new Date().getTimezoneOffset()].join('|');
+  let h=0; for(let i=0;i<raw.length;i++){h=((h<<5)-h)+raw.charCodeAt(i);h|=0;}
+  const rand = Math.random().toString(36).substring(2,8).toUpperCase();
+  const fp = 'FP'+Math.abs(h).toString(16).toUpperCase().padStart(8,'0')+rand;
   localStorage.setItem('fn_fp', fp);
   return fp;
 }
@@ -183,378 +194,314 @@ const FP = getFingerprint();
 
 function getSession() {
   try {
-    const d = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
-    if(!d || d.fp !== FP) { localStorage.removeItem(STORE_KEY); return null; }
-    if(Date.now() > d.expiryMs) {
-      saveCooldown(d.expiryMs);
-      localStorage.removeItem(STORE_KEY);
-      return null;
-    }
+    const d=JSON.parse(localStorage.getItem(STORE_KEY)||"null");
+    if(!d||d.fp!==FP){localStorage.removeItem(STORE_KEY);return null;}
+    if(Date.now()>d.expiryMs){saveCooldown(d.expiryMs);localStorage.removeItem(STORE_KEY);return null;}
     return d;
-  } catch(e) { return null; }
+  } catch(e){return null;}
 }
-function saveSession(key, expiryMs) { localStorage.setItem(STORE_KEY, JSON.stringify({key, expiryMs, fp: FP})); }
-
-function saveCooldown(expiredAt) {
-  localStorage.setItem(STORE_COOL, JSON.stringify({expiredAt, fp: FP}));
-}
+function saveSession(key,expiryMs){localStorage.setItem(STORE_KEY,JSON.stringify({key,expiryMs,fp:FP}));}
+function saveCooldown(expiredAt){localStorage.setItem(STORE_COOL,JSON.stringify({expiredAt,fp:FP}));}
 function getCooldown() {
   try {
-    const d = JSON.parse(localStorage.getItem(STORE_COOL) || "null");
-    if(!d || d.fp !== FP) { localStorage.removeItem(STORE_COOL); return null; }
-    const COOLDOWN_MS = 10 * 60 * 1000;
-    const remaining = COOLDOWN_MS - (Date.now() - d.expiredAt);
-    if(remaining <= 0) { localStorage.removeItem(STORE_COOL); return null; }
-    return {remaining, expiredAt: d.expiredAt};
-  } catch(e) { return null; }
+    const d=JSON.parse(localStorage.getItem(STORE_COOL)||"null");
+    if(!d||d.fp!==FP){localStorage.removeItem(STORE_COOL);return null;}
+    const rem=10*60*1000-(Date.now()-d.expiredAt);
+    if(rem<=0){localStorage.removeItem(STORE_COOL);return null;}
+    return {remaining:rem};
+  } catch(e){return null;}
 }
 
 function fmtHMS(ms) {
-  if(ms <= 0) return "00:00:00";
-  const s = Math.floor(ms / 1000);
-  return String(Math.floor(s / 3600)).padStart(2, "0") + ":" +
-         String(Math.floor((s % 3600) / 60)).padStart(2, "0") + ":" +
-         String(s % 60).padStart(2, "0");
+  if(ms<=0)return"00:00:00";
+  const s=Math.floor(ms/1000);
+  return String(Math.floor(s/3600)).padStart(2,"0")+":"+String(Math.floor((s%3600)/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
 }
 function fmtMS(ms) {
-  if(ms <= 0) return "00:00";
-  const s = Math.floor(ms / 1000);
-  return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+  if(ms<=0)return"00:00";
+  const s=Math.floor(ms/1000);
+  return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
 }
-function cdColor(ms) { return ms < 10 * 60 * 1000 ? "var(--red)" : ms < 30 * 60 * 1000 ? "var(--warn)" : "var(--green)"; }
+function cdColor(ms){return ms<10*60*1000?"var(--red)":ms<30*60*1000?"var(--warn)":"var(--green)";}
 
 function hideAll() {
-  document.getElementById("s-get").style.display = "none";
+  document.getElementById("s-get").style.display="none";
+  document.getElementById("s-load").classList.remove("show");
+  document.getElementById("s-key").classList.remove("show");
+  document.getElementById("s-sc").classList.remove("show");
+  document.getElementById("s-active").classList.remove("show");
+  document.getElementById("s-cooldown").classList.remove("show");
+  document.getElementById("st-err").style.display="none";
+  clearInterval(coolInterval);
+}
+function showErr(msg) {
+  document.getElementById("s-get").style.display="block";
   document.getElementById("s-load").classList.remove("show");
   document.getElementById("s-key").classList.remove("show");
   document.getElementById("s-active").classList.remove("show");
   document.getElementById("s-cooldown").classList.remove("show");
-  document.getElementById("st-err").style.display = "none";
-  clearInterval(coolInterval);
+  const el=document.getElementById("st-err");
+  el.style.display="block"; el.textContent="Error: "+msg;
 }
-function showErr(msg) {
-  hideAll();
-  document.getElementById("s-get").style.display = "block";
-  const el = document.getElementById("st-err");
-  el.style.display = "block";
-  el.textContent = "Error: " + msg;
-}
-function setLoading(txt, sub) {
+function setLoading(txt,sub) {
   hideAll();
   document.getElementById("s-load").classList.add("show");
-  document.getElementById("load-txt").textContent = txt || "LOADING...";
-  document.getElementById("load-sub").textContent = sub || "";
+  document.getElementById("load-txt").textContent=txt||"LOADING...";
+  document.getElementById("load-sub").textContent=sub||"";
 }
 
-function showKey(key, expiryMs) {
-  pickedKey = key; clearInterval(cdInterval); hideAll();
+function showKey(key,expiryMs) {
+  pickedKey=key; clearInterval(cdInterval); hideAll();
   document.getElementById("s-key").classList.add("show");
-  document.getElementById("kv").textContent = key;
-  const cdEl = document.getElementById("kcd"), expEl = document.getElementById("k-exp");
+  document.getElementById("kv").textContent=key;
+  const cdEl=document.getElementById("kcd"),expEl=document.getElementById("k-exp");
   function tick() {
-    const rem = expiryMs - Date.now();
-    if(rem <= 0) {
+    const rem=expiryMs-Date.now();
+    if(rem<=0){
       clearInterval(cdInterval);
-      localStorage.removeItem(STORE_KEY);
-      saveCooldown(expiryMs);
-      cdEl.textContent = "EXPIRED"; cdEl.style.color = "var(--red)";
-      expEl.textContent = "EXPIRED"; expEl.style.color = "var(--red)";
-      setTimeout(() => {
-        hideAll();
-        document.getElementById("s-get").style.display = "block";
-        checkAndShowCooldown();
-      }, 2000);
+      localStorage.removeItem(STORE_KEY); saveCooldown(expiryMs);
+      cdEl.textContent="EXPIRED"; cdEl.style.color="var(--red)";
+      expEl.textContent="EXPIRED"; expEl.style.color="var(--red)";
+      setTimeout(()=>{hideAll();document.getElementById("s-get").style.display="block";checkAndShowCooldown();},2000);
       return;
     }
-    cdEl.textContent = fmtHMS(rem); cdEl.style.color = cdColor(rem);
-    expEl.textContent = fmtHMS(rem) + " LEFT"; expEl.style.color = cdColor(rem);
+    cdEl.textContent=fmtHMS(rem); cdEl.style.color=cdColor(rem);
+    expEl.textContent=fmtHMS(rem)+" LEFT"; expEl.style.color=cdColor(rem);
   }
-  tick(); cdInterval = setInterval(tick, 1000);
+  tick(); cdInterval=setInterval(tick,1000);
+}
+
+// ── Tampilkan short code (setelah redirect dari FNLink step 3/4) ──
+function showShortCode(code, hours) {
+  scCode=code; clearInterval(scInterval); hideAll();
+  document.getElementById("s-sc").classList.add("show");
+  document.getElementById("sc-val").textContent=code;
+  document.getElementById("sc-dur").textContent=hours===6?"6-HOUR SESSION CODE":"3-HOUR SESSION CODE";
+  document.getElementById("card-main-label").textContent="Your Short Code";
+  const expiryMs=Date.now()+15*60*1000;
+  const timerEl=document.getElementById("sc-timer");
+  function tick() {
+    const rem=expiryMs-Date.now();
+    if(rem<=0){
+      clearInterval(scInterval);
+      timerEl.textContent="CODE EXPIRED"; timerEl.style.color="var(--red)";
+      setTimeout(()=>{hideAll();document.getElementById("s-get").style.display="block";document.getElementById("card-main-label").textContent="Your Key";},2000);
+      return;
+    }
+    timerEl.textContent="CODE EXPIRES IN "+fmtMS(rem);
+  }
+  tick(); scInterval=setInterval(tick,1000);
+  // Auto-isi input redeem
+  document.getElementById("code-input").value=code;
+  setRedeemTab(hours);
+  // Pre-fill: jika user langsung scroll ke bawah
+}
+
+function copyShortCode() {
+  if(!scCode)return;
+  navigator.clipboard.writeText(scCode).catch(()=>{
+    const t=document.createElement("textarea");t.value=scCode;
+    document.body.appendChild(t);t.select();document.execCommand("copy");document.body.removeChild(t);
+  });
+  const b=document.getElementById("btn-copy-sc");
+  b.textContent="COPIED!"; b.classList.add("copied");
 }
 
 function showActiveWarn(expiryMs) {
   clearInterval(acInterval); hideAll();
   document.getElementById("s-active").classList.add("show");
-  const el = document.getElementById("acd");
+  const el=document.getElementById("acd");
   function tick() {
-    const rem = expiryMs - Date.now();
-    if(rem <= 0) {
+    const rem=expiryMs-Date.now();
+    if(rem<=0){
       clearInterval(acInterval);
-      localStorage.removeItem(STORE_KEY);
-      saveCooldown(expiryMs);
-      el.textContent = "EXPIRED";
-      setTimeout(() => {
-        hideAll();
-        document.getElementById("s-get").style.display = "block";
-        checkAndShowCooldown();
-      }, 1500);
+      localStorage.removeItem(STORE_KEY); saveCooldown(expiryMs);
+      el.textContent="EXPIRED";
+      setTimeout(()=>{hideAll();document.getElementById("s-get").style.display="block";checkAndShowCooldown();},1500);
       return;
     }
-    el.textContent = fmtHMS(rem); el.style.color = cdColor(rem);
+    el.textContent=fmtHMS(rem); el.style.color=cdColor(rem);
   }
-  tick(); acInterval = setInterval(tick, 1000);
+  tick(); acInterval=setInterval(tick,1000);
 }
 
 function showCooldown(remainingMs) {
   hideAll();
-  document.getElementById("s-get").style.display = "block";
+  document.getElementById("s-get").style.display="block";
   document.getElementById("s-cooldown").classList.add("show");
-  const btnGet = document.getElementById("btn-get");
-  btnGet.classList.add("disabled");
-  const el = document.getElementById("ccd");
+  const b3=document.getElementById("btn-get-3h"), b6=document.getElementById("btn-get-6h");
+  if(b3)b3.classList.add("disabled"); if(b6)b6.classList.add("disabled");
+  const el=document.getElementById("ccd");
   function tick() {
-    const cd = getCooldown();
-    if(!cd) {
+    const cd=getCooldown();
+    if(!cd){
       clearInterval(coolInterval);
-      btnGet.classList.remove("disabled");
-      document.getElementById("s-cooldown").classList.remove("show");
-      return;
+      if(b3)b3.classList.remove("disabled"); if(b6)b6.classList.remove("disabled");
+      document.getElementById("s-cooldown").classList.remove("show"); return;
     }
-    el.textContent = fmtMS(cd.remaining);
+    el.textContent=fmtMS(cd.remaining);
   }
-  tick(); coolInterval = setInterval(tick, 1000);
+  tick(); coolInterval=setInterval(tick,1000);
 }
 
 function checkAndShowCooldown() {
-  const cd = getCooldown();
-  if(cd) showCooldown(cd.remaining);
-}
-
-async function claimToken(token, hmac, hours) {
-  const durLabel = hours === 6 ? "6-HOUR" : "3-HOUR";
-  setLoading("VERIFYING TASK...", "Verifying your " + durLabel + " session");
-  try {
-    const res  = await fetch(SERVER_URL + "?action=verify", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({token, hmac, fp: FP, hours: hours || 3})
-    });
-    const data = await res.json();
-    if(!data.ok) {
-      if(data.error === "cooldown_active") {
-        saveCooldown(Date.now() - (10 * 60 * 1000 - data.remainingMs));
-        hideAll();
-        document.getElementById("s-get").style.display = "block";
-        showCooldown(data.remainingMs);
-        history.replaceState({}, "", location.pathname);
-        return;
-      }
-      const msgs = {
-        token_not_found:    "Token not found — complete the Linkvertise task first.",
-        token_expired:      "Token expired — please retry from GET KEY.",
-        token_already_used: "Token already used.",
-        invalid_hmac:       "Invalid token.",
-        device_mismatch:    "Device mismatch.",
-      };
-      showErr(msgs[data.error] || data.error);
-      return;
-    }
-    saveSession(data.key, data.expiryMs);
-    localStorage.removeItem(STORE_COOL);
-    showKey(data.key, data.expiryMs);
-    history.replaceState({}, "", location.pathname);
-  } catch(e) {
-    showErr("Failed to connect — check your internet connection.");
-  }
-}
-
-// Disable/enable tombol berdasarkan duration yang dipilih
-function setButtonsDisabled(disabled) {
-  const b3 = document.getElementById("btn-get-3h");
-  const b6 = document.getElementById("btn-get-6h");
-  if(b3) disabled ? b3.classList.add("disabled") : b3.classList.remove("disabled");
-  if(b6) disabled ? b6.classList.add("disabled") : b6.classList.remove("disabled");
+  const cd=getCooldown();
+  if(cd)showCooldown(cd.remaining);
 }
 
 async function onClickGet(hours) {
-  const cd = getCooldown();
-  if(cd) { showCooldown(cd.remaining); return false; }
-  const sess = getSession();
-  if(sess) { showActiveWarn(sess.expiryMs); return false; }
-
-  setLoading("PREPARING...", "Please wait a moment");
+  const cd=getCooldown(); if(cd){showCooldown(cd.remaining);return false;}
+  const sess=getSession(); if(sess){showActiveWarn(sess.expiryMs);return false;}
+  setLoading("PREPARING...","Please wait a moment");
   try {
-    const res  = await fetch(SERVER_URL + "?action=preflight", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ fp: FP, hours: hours })
+    const res=await fetch(SERVER_URL+"?action=preflight",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({fp:FP,hours})
     });
-    const data = await res.json();
-    if(!data.ok || !data.token || !data.hmac) {
-      showErr(data.error || "Failed to prepare. Try again.");
-      return false;
-    }
-    // Simpan ke localStorage dengan expiry 5 menit
-    // sessionStorage tidak reliable di Android/WebView saat lintas redirect
-    localStorage.removeItem("fn_pending"); // clear data lama sebelum set baru
-    localStorage.setItem("fn_pending", JSON.stringify({
-      token: data.token, hmac: data.hmac, hours: hours,
-      expiry: Date.now() + 5 * 60 * 1000
-    }));
-    // Arahkan ke Linkvertise sesuai durasi yang dipilih
-    window.location.href = hours === 6 ? LV_URL_6H : LV_URL_3H;
-  } catch(e) {
-    showErr("Failed to connect — check your internet connection.");
-  }
+    const data=await res.json();
+    if(!data.ok||!data.token||!data.hmac){showErr(data.error||"Failed to prepare. Try again.");return false;}
+    localStorage.removeItem("fn_pending");
+    localStorage.setItem("fn_pending",JSON.stringify({token:data.token,hmac:data.hmac,hours,expiry:Date.now()+5*60*1000}));
+    window.location.href=hours===6?LV_URL_6H:LV_URL_3H;
+  } catch(e){showErr("Failed to connect — check your internet connection.");}
   return false;
 }
 
-function copyKey() {
-  if(!pickedKey) return;
-  navigator.clipboard.writeText(pickedKey).catch(() => {
-    const t = document.createElement("textarea");
-    t.value = pickedKey;
-    document.body.appendChild(t); t.select(); document.execCommand("copy"); document.body.removeChild(t);
-  });
-  const b = document.getElementById("btn-copy");
-  b.textContent = "COPIED!";
-  b.classList.add("copied");
-}
-
-// ───── REDEEM SHORT CODE ─────────────────────────────────────────
-let autoTimer = null, autoSecs = 30;
-
-function setRedeemStatus(msg, type) {
-  const el = document.getElementById("st-redeem");
-  el.textContent = msg;
-  el.className = "status" + (type === "ok" ? " ok" : type === "err" ? " err" : "");
-}
-
-function cancelAuto() {
-  clearInterval(autoTimer); autoTimer = null;
-  document.getElementById("auto-bar").style.display = "none";
-  document.getElementById("inp-code").value = "";
-  setRedeemStatus("", "");
-}
-
-function startAutoCountdown(code) {
-  autoSecs = 30;
-  document.getElementById("inp-code").value = code;
-  document.getElementById("auto-bar").style.display = "flex";
-  document.getElementById("auto-cd").textContent = autoSecs;
-  setRedeemStatus("Code terdeteksi dari clipboard!", "ok");
-  clearInterval(autoTimer);
-  autoTimer = setInterval(() => {
-    autoSecs--;
-    document.getElementById("auto-cd").textContent = autoSecs;
-    if (autoSecs <= 0) {
-      clearInterval(autoTimer); autoTimer = null;
-      document.getElementById("auto-bar").style.display = "none";
-      doRedeem();
-    }
-  }, 1000);
-}
-
-async function pasteCode() {
-  try {
-    const text = await navigator.clipboard.readText();
-    const code = text.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-    if (code.length === 6 || code.length === 9) {
-      document.getElementById("inp-code").value = code;
-      setRedeemStatus("Code di-paste!", "ok");
-    } else {
-      setRedeemStatus("Clipboard tidak berisi short code yang valid.", "err");
-    }
-  } catch(e) {
-    setRedeemStatus("Tidak bisa akses clipboard. Paste manual.", "err");
+// ── Redeem tab: pilih 3H atau 6H ──
+function setRedeemTab(h) {
+  redeemHours=h;
+  const t3=document.getElementById("tab-3h"), t6=document.getElementById("tab-6h");
+  const inp=document.getElementById("code-input"), hint=document.getElementById("code-hint");
+  if(h===6){
+    t3.className="tab-btn"; t6.className="tab-btn active-tab";
+    inp.maxLength=9; inp.placeholder="—————————";
+    hint.textContent="Enter your 9-digit short code (6H session)";
+  } else {
+    t3.className="tab-btn active-tab-warn"; t6.className="tab-btn";
+    inp.maxLength=6; inp.placeholder="——————";
+    hint.textContent="Enter your 6-digit short code (3H session)";
   }
+  document.getElementById("st-err").style.display="none";
+}
+
+function onCodeInput() {
+  const inp=document.getElementById("code-input");
+  inp.value=inp.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
 }
 
 async function doRedeem() {
-  const code = (document.getElementById("inp-code").value || "").trim().toUpperCase();
-  if (code.length !== 6 && code.length !== 9) {
-    setRedeemStatus("Short code harus 6 atau 9 karakter.", "err"); return;
+  const inp=document.getElementById("code-input");
+  const code=inp.value.trim().toUpperCase();
+  const expectedLen=redeemHours===6?9:6;
+  if(code.length!==expectedLen){
+    showErr(`Enter a ${expectedLen}-digit code for the ${redeemHours}H session.`);return;
   }
-  const btn = document.getElementById("btn-redeem");
-  btn.textContent = "CHECKING..."; btn.disabled = true;
-  setRedeemStatus("Menukar short code...", "");
+  // Cek active session / cooldown
+  const sess=getSession(); if(sess){showActiveWarn(sess.expiryMs);return;}
+  const cd=getCooldown(); if(cd){showCooldown(cd.remaining);return;}
+
+  const btn=document.getElementById("btn-redeem");
+  btn.classList.add("loading-r"); btn.textContent="REDEEMING...";
+  setLoading("REDEEMING CODE...","Exchanging your short code for a key");
   try {
-    const res  = await fetch(SERVER_URL + "?action=redeem", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ shortCode: code, fp: FP })
+    const res=await fetch(SERVER_URL+"?action=shortcode_redeem",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({code,fp:FP,hours:redeemHours})
     });
-    const data = await res.json();
-    if (!data.ok) {
-      const msgs = {
-        code_not_found:    "Short code tidak ditemukan atau sudah expired.",
-        token_expired:     "Short code expired — ulangi dari GET KEY.",
-        token_already_used:"Short code sudah pernah dipakai.",
-        cooldown_active:   "Cooldown aktif — tunggu sebentar.",
-        missing_code:      "Masukkan short code dulu.",
+    const data=await res.json();
+    btn.classList.remove("loading-r"); btn.textContent="REDEEM CODE";
+    if(!data.ok){
+      const msgs={
+        code_not_found:"Code not found or expired. Complete the task again.",
+        code_wrong_duration:"Wrong duration — make sure you select the correct tab (3H or 6H).",
+        token_not_found:"Code token expired. Please do the task again.",
+        token_already_used:"This code has already been used.",
+        invalid_hmac:"Invalid code.",
+        cooldown_active:"You're on cooldown. Wait before generating a new key.",
       };
-      setRedeemStatus(msgs[data.error] || ("Error: " + data.error), "err");
-      btn.textContent = "REDEEM"; btn.disabled = false; return;
+      showErr(msgs[data.error]||data.error); return;
     }
-    saveSession(data.key, data.expiryMs);
+    saveSession(data.key,data.expiryMs);
     localStorage.removeItem(STORE_COOL);
-    document.getElementById("inp-code").value = "";
-    setRedeemStatus("", "");
-    document.getElementById("card-redeem").style.display = "none";
-    showKey(data.key, data.expiryMs);
-  } catch(e) {
-    setRedeemStatus("Koneksi gagal — cek internet kamu.", "err");
+    inp.value="";
+    showKey(data.key,data.expiryMs);
+  } catch(e){
+    btn.classList.remove("loading-r"); btn.textContent="REDEEM CODE";
+    showErr("Failed to connect — check your internet connection.");
   }
-  btn.textContent = "REDEEM"; btn.disabled = false;
 }
 
-// Cek clipboard saat halaman load — jika ada short code, auto-fill + countdown
-async function checkClipboardForCode() {
-  try {
-    const text = await navigator.clipboard.readText();
-    const code = text.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-    if ((code.length === 6 || code.length === 9) && /^[A-Z0-9]+$/.test(code)) {
-      startAutoCountdown(code);
-    }
-  } catch(e) { /* clipboard permission denied — skip */ }
+function copyKey() {
+  if(!pickedKey)return;
+  navigator.clipboard.writeText(pickedKey).catch(()=>{
+    const t=document.createElement("textarea");t.value=pickedKey;
+    document.body.appendChild(t);t.select();document.execCommand("copy");document.body.removeChild(t);
+  });
+  const b=document.getElementById("btn-copy");
+  b.textContent="COPIED!"; b.classList.add("copied");
 }
-// ─────────────────────────────────────────────────────────────────
 
+window.addEventListener("load",()=>{
+  const params=new URLSearchParams(location.search);
 
-  // ✅ FIX: Cek ?landed=1 — user balik dari Linkvertise
-  // Token disimpan di sessionStorage sebelum redirect, bukan di URL
-  const params = new URLSearchParams(location.search);
+  // ── Tampilkan short code dari step FNLink ──
+  const sc=params.get("sc"), scH=parseInt(params.get("h")||"3");
+  if(sc) {
+    history.replaceState({},"",location.pathname);
+    showShortCode(sc.toUpperCase(), scH===6?6:3);
+    return;
+  }
 
-  if(params.get("landed") === "1") {
-    history.replaceState({}, "", location.pathname);
-    const raw = localStorage.getItem("fn_pending");
+  // ── Legacy: landed=1 (token di localStorage) ──
+  if(params.get("landed")==="1") {
+    history.replaceState({},"",location.pathname);
+    const raw=localStorage.getItem("fn_pending");
     localStorage.removeItem("fn_pending");
     if(raw) {
       try {
-        const pd = JSON.parse(raw);
-        if(pd.token && pd.hmac && Date.now() < pd.expiry) {
-          claimToken(pd.token, pd.hmac, pd.hours || 3);
-          return;
+        const pd=JSON.parse(raw);
+        if(pd.token&&pd.hmac&&Date.now()<pd.expiry) {
+          // Di flow baru, seharusnya tidak lewat sini — tapi fallback tetap ada
+          claimTokenLegacy(pd.token,pd.hmac,pd.hours||3); return;
         }
-      } catch(e) {}
+      } catch(e){}
     }
-    // Pending hilang/expired — tampilkan tombol lagi, jangan error menakutkan
     hideAll();
-    document.getElementById("s-get").style.display = "block";
-    const errEl = document.getElementById("st-err");
-    errEl.style.display = "block";
-    errEl.textContent = "Session lost — please tap GET KEY again.";
+    document.getElementById("s-get").style.display="block";
+    const errEl=document.getElementById("st-err");
+    errEl.style.display="block";
+    errEl.textContent="Session lost — please tap GET KEY again.";
     return;
   }
 
-  // Support flow lama (token di URL) — bisa dihapus nanti setelah semua migrasi
-  const token = params.get("token"), hmac = params.get("hmac");
-  if(token && hmac) { claimToken(token, hmac); return; }
-
-  const sess = getSession();
-  if(sess) { showKey(sess.key, sess.expiryMs); return; }
-  const cd = getCooldown();
-  if(cd) {
-    document.getElementById("s-get").style.display = "block";
-    showCooldown(cd.remaining);
-    return;
-  }
-  // Bersihkan fn_pending lama yang sudah expired
+  const sess=getSession();
+  if(sess){showKey(sess.key,sess.expiryMs);return;}
+  const cd=getCooldown();
+  if(cd){document.getElementById("s-get").style.display="block";showCooldown(cd.remaining);return;}
   try {
-    const op = localStorage.getItem("fn_pending");
-    if(op) { const p = JSON.parse(op); if(Date.now() > p.expiry) localStorage.removeItem("fn_pending"); }
-  } catch(e) { localStorage.removeItem("fn_pending"); }
-  document.getElementById("s-get").style.display = "block";
-  // Cek clipboard — auto-fill short code jika ada
-  checkClipboardForCode();
+    const op=localStorage.getItem("fn_pending");
+    if(op){const p=JSON.parse(op);if(Date.now()>p.expiry)localStorage.removeItem("fn_pending");}
+  } catch(e){localStorage.removeItem("fn_pending");}
+  document.getElementById("s-get").style.display="block";
+  setRedeemTab(3);
 });
+
+// Legacy fallback
+async function claimTokenLegacy(token,hmac,hours) {
+  setLoading("VERIFYING...","Verifying your task");
+  try {
+    const res=await fetch(SERVER_URL+"?action=verify",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({token,hmac,fp:FP,hours})
+    });
+    const data=await res.json();
+    if(!data.ok){showErr(data.error);return;}
+    saveSession(data.key,data.expiryMs);
+    localStorage.removeItem(STORE_COOL);
+    showKey(data.key,data.expiryMs);
+    history.replaceState({},"",location.pathname);
+  } catch(e){showErr("Failed to connect.");}
+}
 </script>
 </body>
 </html>

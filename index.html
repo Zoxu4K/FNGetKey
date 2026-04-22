@@ -60,6 +60,10 @@
   .redeem-input{background:#000;border:1px solid var(--warn);border-radius:6px;padding:14px;font-family:'Share Tech Mono',monospace;font-size:24px;color:var(--warn);text-align:center;letter-spacing:4px;width:100%;outline:none}
   .redeem-input:focus{border-color:var(--accent);color:var(--accent)}
   .redeem-timer{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--red);text-align:center;letter-spacing:2px;min-height:16px}
+  .redeem-code-display{background:#000;border:1px solid var(--green);border-radius:6px;padding:16px;font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--green);text-align:center;letter-spacing:4px;word-break:break-all;animation:glow 2s infinite}
+  .redeem-code-label{font-size:9px;font-family:'Share Tech Mono',monospace;color:var(--dim);text-align:center;letter-spacing:3px;margin-bottom:2px}
+  .redeem-copy-btn{background:transparent;border:1px solid var(--green);color:var(--green);font-size:11px;font-family:'Share Tech Mono',monospace;letter-spacing:2px;padding:6px 14px;border-radius:4px;cursor:pointer;width:100%}
+  .redeem-copy-btn:active{background:rgba(0,255,136,.1)}
 </style>
 </head>
 <body>
@@ -93,6 +97,7 @@
     <div class="redeem-box" id="s-redeem">
       <div class="card-label">Redeem Your Code</div>
       <div class="redeem-hint" id="redeem-hint">Enter your code below</div>
+      <div class="redeem-code-display" id="redeem-code-display" style="display:none"></div>
       <input class="redeem-input" id="redeem-input" type="text" maxlength="9" placeholder="XXXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z2-9]/g,'')"/>
       <div class="redeem-timer" id="redeem-timer"></div>
       <button class="btn btn-copy" id="btn-redeem" onclick="submitRedeem()">REDEEM CODE</button>
@@ -133,19 +138,29 @@ const STORE_COOL  = "fn_cooldown";
 let pickedKey = null, cdInterval = null, acInterval = null, coolInterval = null, redeemTimerInterval = null;
 let pendingRedeemData = null; // simpan token+hmac+hours saat menunggu redeem kode
 
-function showRedeemInput(hours, expiresInSeconds) {
+function showRedeemInput(hours, expiresInSeconds, code) {
   hideAll();
   document.getElementById("s-redeem").classList.add("show");
   const input = document.getElementById("redeem-input");
   const hint  = document.getElementById("redeem-hint");
   const timerEl = document.getElementById("redeem-timer");
   const errEl = document.getElementById("redeem-err");
+  const codeDisplay = document.getElementById("redeem-code-display");
   const maxLen = hours === 6 ? 20 : 10;
   input.maxLength = maxLen;
   input.placeholder = hours === 6 ? "XXXXXXXXXXXXXXXXXXXX" : "XXXXXXXXXX";
-  hint.textContent = `Enter your ${maxLen}-character redeem code (${hours}H session)`;
+  hint.textContent = `Your ${hours}H redeem code — copy & paste it below:`;
   errEl.style.display = "none";
-  input.value = "";
+
+  // Tampilkan kode yang didapat dari server
+  if (code) {
+    codeDisplay.style.display = "block";
+    codeDisplay.innerHTML = `<div class="redeem-code-label">YOUR REDEEM CODE</div>${code}<br><button class="redeem-copy-btn" onclick="copyRedeemCode('${code}')">COPY CODE</button>`;
+    input.value = code; // auto-isi input supaya tinggal tekan REDEEM
+  } else {
+    codeDisplay.style.display = "none";
+    input.value = "";
+  }
   input.focus();
 
   // Countdown timer kode
@@ -164,6 +179,13 @@ function showRedeemInput(hours, expiresInSeconds) {
   }
   tickRedeem();
   redeemTimerInterval = setInterval(tickRedeem, 1000);
+}
+
+function copyRedeemCode(code) {
+  navigator.clipboard.writeText(code).catch(() => {
+    const t = document.createElement("textarea");
+    t.value = code; document.body.appendChild(t); t.select(); document.execCommand("copy"); document.body.removeChild(t);
+  });
 }
 
 async function submitRedeem() {
@@ -404,7 +426,7 @@ async function genCode(token, hmac, hours) {
     // Simpan data redeem untuk dipakai saat user submit kode
     pendingRedeemData = { token, hmac, hours: data.hours };
     history.replaceState({}, "", location.pathname);
-    showRedeemInput(data.hours, data.expiresInSeconds);
+    showRedeemInput(data.hours, data.expiresInSeconds, data.code);
   } catch(e) {
     showErr("Failed to connect — check your internet connection.");
   }

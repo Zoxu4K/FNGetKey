@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
 <title>Get Key — Fake Ninja</title>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet"/>
 <style>
@@ -149,15 +152,19 @@ function showRedeemInput(hours, expiresInSeconds, code) {
   const maxLen = hours === 6 ? 20 : 10;
   input.maxLength = maxLen;
   input.placeholder = hours === 6 ? "XXXXXXXXXXXXXXXXXXXX" : "XXXXXXXXXX";
-  hint.textContent = `Your ${hours}H redeem code — copy & paste it below:`;
   errEl.style.display = "none";
 
   // Tampilkan kode yang didapat dari server
   if (code) {
+    hint.textContent = "\u2705 Task selesai! Ini kode redeem " + hours + "H kamu:";
     codeDisplay.style.display = "block";
-    codeDisplay.innerHTML = `<div class="redeem-code-label">YOUR REDEEM CODE</div>${code}<br><button class="redeem-copy-btn" onclick="copyRedeemCode('${code}')">COPY CODE</button>`;
-    input.value = code; // auto-isi input supaya tinggal tekan REDEEM
+    codeDisplay.innerHTML =
+      '<div class="redeem-code-label">YOUR REDEEM CODE</div>' +
+      '<div style="font-size:22px;letter-spacing:6px;color:#00ff88;font-family:monospace;padding:8px 0;word-break:break-all">' + code + '</div>' +
+      '<button class="redeem-copy-btn" onclick="copyRedeemCode(\'' + code + '\')">&#128203; COPY CODE</button>';
+    input.value = code; // auto-isi supaya tinggal tekan REDEEM
   } else {
+    hint.textContent = "Enter your " + maxLen + "-character redeem code (" + hours + "H session)";
     codeDisplay.style.display = "none";
     input.value = "";
   }
@@ -174,7 +181,7 @@ function showRedeemInput(hours, expiresInSeconds, code) {
     }
     const m = String(Math.floor(remaining / 60)).padStart(2,"0");
     const s = String(remaining % 60).padStart(2,"0");
-    timerEl.textContent = `CODE EXPIRES IN ${m}:${s}`;
+    timerEl.textContent = "CODE EXPIRES IN " + m + ":" + s;
     remaining--;
   }
   tickRedeem();
@@ -395,13 +402,13 @@ function checkAndShowCooldown() {
   if(cd) showCooldown(cd.remaining);
 }
 
-async function genCode(token, hmac, hours) {
+async function genCode(token, hmac, hours, nonce) {
   const durLabel = hours === 6 ? "6-HOUR" : "3-HOUR";
   setLoading("GENERATING CODE...", "Verifying your " + durLabel + " Linkvertise task");
   try {
     const res  = await fetch(SERVER_URL + "?action=gen_code", {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({token, hmac, fp: FP, hours: hours || 3})
+      body: JSON.stringify({token, hmac, fp: FP, hours: hours || 3, nonce: nonce || ""})
     });
     const data = await res.json();
     if(!data.ok) {
@@ -414,16 +421,19 @@ async function genCode(token, hmac, hours) {
         return;
       }
       const msgs = {
-        token_not_found:    "Token not found — complete the Linkvertise task first.",
-        token_expired:      "Token expired — please retry from GET KEY.",
-        token_already_used: "Token already used.",
-        invalid_hmac:       "Invalid token.",
-        device_mismatch:    "Device mismatch.",
+        token_not_found:            "Token not found — complete the Linkvertise task first.",
+        token_expired:              "Token expired — please retry from GET KEY.",
+        token_already_used:         "Token already used.",
+        invalid_hmac:               "Invalid token.",
+        invalid_nonce:              "Invalid session — please tap GET KEY again.",
+        nonce_expired_or_invalid:   "Session expired — please tap GET KEY again.",
+        nonce_already_used:         "Session already used — please tap GET KEY again.",
+        preflight_window_expired:   "Session timed out — please tap GET KEY again.",
+        invalid_token_origin:       "Invalid request origin.",
       };
       showErr(msgs[data.error] || data.error);
       return;
     }
-    // Simpan data redeem untuk dipakai saat user submit kode
     pendingRedeemData = { token, hmac, hours: data.hours };
     history.replaceState({}, "", location.pathname);
     showRedeemInput(data.hours, data.expiresInSeconds, data.code);
@@ -446,26 +456,26 @@ async function onClickGet(hours) {
   const sess = getSession();
   if(sess) { showActiveWarn(sess.expiryMs); return false; }
 
-  setLoading("PREPARING...", "Please wait a moment");
   try {
     const res  = await fetch(SERVER_URL + "?action=preflight", {
       method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({ fp: FP, hours: hours })
     });
     const data = await res.json();
-    if(!data.ok || !data.token || !data.hmac) {
+    if(!data.ok || !data.token || !data.hmac || !data.nonce) {
       showErr(data.error || "Failed to prepare. Try again.");
       return false;
     }
-    // Simpan ke localStorage dengan expiry 5 menit
-    // sessionStorage tidak reliable di Android/WebView saat lintas redirect
-    localStorage.removeItem("fn_pending"); // clear data lama sebelum set baru
+    localStorage.removeItem("fn_pending");
     localStorage.setItem("fn_pending", JSON.stringify({
-      token: data.token, hmac: data.hmac, hours: hours,
+      token: data.token, hmac: data.hmac, hours: hours, nonce: data.nonce,
       expiry: Date.now() + 5 * 60 * 1000
     }));
-    // Arahkan ke Linkvertise sesuai durasi yang dipilih
-    window.location.href = hours === 6 ? LV_URL_6H : LV_URL_3H;
+    // ✅ ANTI-BYPASS: Nonce di-embed ke URL Linkvertise sebagai custom param
+    // Linkvertise akan forward param ini ke URL redirect (GetKey/?landed=1&r=NONCE)
+    // User yang buka success page lama tidak punya nonce baru yang valid
+    const lvBase = hours === 6 ? LV_URL_6H : LV_URL_3H;
+    window.location.href = lvBase + "?r=" + data.nonce;
   } catch(e) {
     showErr("Failed to connect — check your internet connection.");
   }
@@ -496,8 +506,8 @@ window.addEventListener("load", () => {
     if(raw) {
       try {
         const pd = JSON.parse(raw);
-        if(pd.token && pd.hmac && Date.now() < pd.expiry) {
-          genCode(pd.token, pd.hmac, pd.hours || 3);
+        if(pd.token && pd.hmac && pd.nonce && Date.now() < pd.expiry) {
+          genCode(pd.token, pd.hmac, pd.hours || 3, pd.nonce);
           return;
         }
       } catch(e) {}

@@ -3,9 +3,6 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
-<meta http-equiv="Pragma" content="no-cache"/>
-<meta http-equiv="Expires" content="0"/>
 <title>Get Key — Fake Ninja</title>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet"/>
 <style>
@@ -57,16 +54,20 @@
   .info-row{display:flex;gap:8px;font-size:12px;color:var(--dim);align-items:flex-start}
   .dot-sm{width:4px;height:4px;border-radius:50%;background:var(--dim);flex-shrink:0;margin-top:5px}
   .footer{text-align:center;font-size:9px;color:#1e1e24;letter-spacing:1px;margin-top:4px}
-  .redeem-box{display:none;flex-direction:column;gap:10px}
-  .redeem-box.show{display:flex}
-  .redeem-hint{font-size:11px;font-family:'Share Tech Mono',monospace;color:var(--dim);text-align:center;letter-spacing:1px}
-  .redeem-input{background:#000;border:1px solid var(--warn);border-radius:6px;padding:14px;font-family:'Share Tech Mono',monospace;font-size:24px;color:var(--warn);text-align:center;letter-spacing:4px;width:100%;outline:none}
-  .redeem-input:focus{border-color:var(--accent);color:var(--accent)}
-  .redeem-timer{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--red);text-align:center;letter-spacing:2px;min-height:16px}
-  .redeem-code-display{background:#000;border:1px solid var(--green);border-radius:6px;padding:16px;font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--green);text-align:center;letter-spacing:4px;word-break:break-all;animation:glow 2s infinite}
-  .redeem-code-label{font-size:9px;font-family:'Share Tech Mono',monospace;color:var(--dim);text-align:center;letter-spacing:3px;margin-bottom:2px}
-  .redeem-copy-btn{background:transparent;border:1px solid var(--green);color:var(--green);font-size:11px;font-family:'Share Tech Mono',monospace;letter-spacing:2px;padding:6px 14px;border-radius:4px;cursor:pointer;width:100%}
-  .redeem-copy-btn:active{background:rgba(0,255,136,.1)}
+
+  /* ── iframe overlay ── */
+  .lv-overlay{display:none;position:fixed;inset:0;z-index:9999;flex-direction:column;background:rgba(6,6,8,.97)}
+  .lv-overlay.show{display:flex}
+  .lv-overlay-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+  .lv-overlay-title{font-size:11px;font-weight:700;letter-spacing:3px;color:var(--accent);font-family:'Share Tech Mono',monospace}
+  .lv-overlay-close{background:transparent;border:1px solid var(--red);color:var(--red);font-size:11px;font-weight:700;letter-spacing:2px;padding:5px 12px;border-radius:4px;cursor:pointer;font-family:'Rajdhani',sans-serif}
+  .lv-overlay-close:hover{background:rgba(255,51,85,.12)}
+  .lv-iframe-wrap{flex:1;position:relative;overflow:hidden}
+  .lv-iframe{width:100%;height:100%;border:none;background:#fff}
+  .lv-blocked{display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;height:100%;padding:24px;text-align:center}
+  .lv-blocked.show{display:flex}
+  .lv-blocked p{font-size:13px;color:var(--dim);font-family:'Share Tech Mono',monospace;line-height:1.7}
+  .lv-blocked .btn-open{background:var(--accent);color:#000;padding:12px 28px;border-radius:6px;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;border:none;cursor:pointer;text-decoration:none;display:inline-block}
 </style>
 </head>
 <body>
@@ -96,15 +97,6 @@
       <div class="key-meta"><span>SESSION KEY</span><span id="k-exp" style="color:var(--green)">ACTIVE</span></div>
       <button class="btn btn-copy" id="btn-copy" onclick="copyKey()">COPY KEY</button>
       <div class="status ok">Paste this key into the Fake Ninja app.</div>
-    </div>
-    <div class="redeem-box" id="s-redeem">
-      <div class="card-label">Redeem Your Code</div>
-      <div class="redeem-hint" id="redeem-hint">Enter your code below</div>
-      <div class="redeem-code-display" id="redeem-code-display" style="display:none"></div>
-      <input class="redeem-input" id="redeem-input" type="text" maxlength="9" placeholder="XXXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z2-9]/g,'')"/>
-      <div class="redeem-timer" id="redeem-timer"></div>
-      <button class="btn btn-copy" id="btn-redeem" onclick="submitRedeem()">REDEEM CODE</button>
-      <div class="status err" id="redeem-err" style="display:none"></div>
     </div>
     <div class="active-box" id="s-active">
       <p>You still have an active key.<br>Wait until it expires before generating a new one.</p>
@@ -138,106 +130,7 @@ const STORE_KEY   = "fn_active_session";
 const STORE_COOL  = "fn_cooldown";
 // ================================================================
 
-let pickedKey = null, cdInterval = null, acInterval = null, coolInterval = null, redeemTimerInterval = null;
-let pendingRedeemData = null; // simpan token+hmac+hours saat menunggu redeem kode
-
-function showRedeemInput(hours, expiresInSeconds, code) {
-  hideAll();
-  document.getElementById("s-redeem").classList.add("show");
-  const input = document.getElementById("redeem-input");
-  const hint  = document.getElementById("redeem-hint");
-  const timerEl = document.getElementById("redeem-timer");
-  const errEl = document.getElementById("redeem-err");
-  const codeDisplay = document.getElementById("redeem-code-display");
-  const maxLen = hours === 6 ? 20 : 10;
-  input.maxLength = maxLen;
-  input.placeholder = hours === 6 ? "XXXXXXXXXXXXXXXXXXXX" : "XXXXXXXXXX";
-  errEl.style.display = "none";
-
-  // Tampilkan kode yang didapat dari server
-  if (code) {
-    hint.textContent = "\u2705 Task selesai! Ini kode redeem " + hours + "H kamu:";
-    codeDisplay.style.display = "block";
-    codeDisplay.innerHTML =
-      '<div class="redeem-code-label">YOUR REDEEM CODE</div>' +
-      '<div style="font-size:22px;letter-spacing:6px;color:#00ff88;font-family:monospace;padding:8px 0;word-break:break-all">' + code + '</div>' +
-      '<button class="redeem-copy-btn" onclick="copyRedeemCode(\'' + code + '\')">&#128203; COPY CODE</button>';
-    input.value = code; // auto-isi supaya tinggal tekan REDEEM
-  } else {
-    hint.textContent = "Enter your " + maxLen + "-character redeem code (" + hours + "H session)";
-    codeDisplay.style.display = "none";
-    input.value = "";
-  }
-  input.focus();
-
-  // Countdown timer kode
-  let remaining = expiresInSeconds;
-  function tickRedeem() {
-    if(remaining <= 0) {
-      clearInterval(redeemTimerInterval);
-      timerEl.textContent = "CODE EXPIRED";
-      document.getElementById("btn-redeem").classList.add("disabled");
-      return;
-    }
-    const m = String(Math.floor(remaining / 60)).padStart(2,"0");
-    const s = String(remaining % 60).padStart(2,"0");
-    timerEl.textContent = "CODE EXPIRES IN " + m + ":" + s;
-    remaining--;
-  }
-  tickRedeem();
-  redeemTimerInterval = setInterval(tickRedeem, 1000);
-}
-
-function copyRedeemCode(code) {
-  navigator.clipboard.writeText(code).catch(() => {
-    const t = document.createElement("textarea");
-    t.value = code; document.body.appendChild(t); t.select(); document.execCommand("copy"); document.body.removeChild(t);
-  });
-}
-
-async function submitRedeem() {
-  const code = document.getElementById("redeem-input").value.trim().toUpperCase();
-  const errEl = document.getElementById("redeem-err");
-  const btn = document.getElementById("btn-redeem");
-  if(!code) { errEl.style.display="block"; errEl.textContent="Please enter your code."; return; }
-  if(!pendingRedeemData) { errEl.style.display="block"; errEl.textContent="Session lost — tap GET KEY again."; return; }
-
-  btn.classList.add("disabled");
-  btn.textContent = "VERIFYING...";
-  errEl.style.display = "none";
-
-  try {
-    const res = await fetch(SERVER_URL + "?action=redeem_code", {
-      method: "POST", headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ code, fp: FP })
-    });
-    const data = await res.json();
-    if(!data.ok) {
-      btn.classList.remove("disabled");
-      btn.textContent = "REDEEM CODE";
-      const msgs = {
-        code_not_found:    "Invalid code — check and try again.",
-        code_already_used: "This code has already been used.",
-        device_mismatch:   "This code was generated on a different device.",
-        invalid_code_format: "Invalid code format.",
-        cooldown_active:   "Cooldown active — wait before generating a new key.",
-      };
-      errEl.style.display = "block";
-      errEl.textContent = msgs[data.error] || ("Error: " + data.error);
-      return;
-    }
-    saveSession(data.key, data.expiryMs);
-    localStorage.removeItem(STORE_COOL);
-    pendingRedeemData = null;
-    showKey(data.key, data.expiryMs);
-    history.replaceState({}, "", location.pathname);
-  } catch(e) {
-    btn.classList.remove("disabled");
-    btn.textContent = "REDEEM CODE";
-    errEl.style.display = "block";
-    errEl.textContent = "Connection failed — check your internet.";
-  }
-}
+let pickedKey = null, cdInterval = null, acInterval = null, coolInterval = null;
 
 function getFingerprint() {
   // Cek apakah sudah tersimpan di localStorage agar stable antar reload
@@ -309,10 +202,8 @@ function hideAll() {
   document.getElementById("s-key").classList.remove("show");
   document.getElementById("s-active").classList.remove("show");
   document.getElementById("s-cooldown").classList.remove("show");
-  document.getElementById("s-redeem").classList.remove("show");
   document.getElementById("st-err").style.display = "none";
   clearInterval(coolInterval);
-  clearInterval(redeemTimerInterval);
 }
 function showErr(msg) {
   hideAll();
@@ -402,13 +293,13 @@ function checkAndShowCooldown() {
   if(cd) showCooldown(cd.remaining);
 }
 
-async function genCode(token, hmac, hours, nonce) {
+async function claimToken(token, hmac, hours) {
   const durLabel = hours === 6 ? "6-HOUR" : "3-HOUR";
-  setLoading("GENERATING CODE...", "Verifying your " + durLabel + " Linkvertise task");
+  setLoading("VERIFYING TASK...", "Verifying your " + durLabel + " session");
   try {
-    const res  = await fetch(SERVER_URL + "?action=gen_code", {
+    const res  = await fetch(SERVER_URL + "?action=verify", {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({token, hmac, fp: FP, hours: hours || 3, nonce: nonce || ""})
+      body: JSON.stringify({token, hmac, fp: FP, hours: hours || 3})
     });
     const data = await res.json();
     if(!data.ok) {
@@ -421,22 +312,20 @@ async function genCode(token, hmac, hours, nonce) {
         return;
       }
       const msgs = {
-        token_not_found:            "Token not found — complete the Linkvertise task first.",
-        token_expired:              "Token expired — please retry from GET KEY.",
-        token_already_used:         "Token already used.",
-        invalid_hmac:               "Invalid token.",
-        invalid_nonce:              "Invalid session — please tap GET KEY again.",
-        nonce_expired_or_invalid:   "Session expired — please tap GET KEY again.",
-        nonce_already_used:         "Session already used — please tap GET KEY again.",
-        preflight_window_expired:   "Session timed out — please tap GET KEY again.",
-        invalid_token_origin:       "Invalid request origin.",
+        token_not_found:    "Token not found — complete the Linkvertise task first.",
+        token_expired:      "Token expired — please retry from GET KEY.",
+        token_already_used: "Token already used.",
+        invalid_hmac:       "Invalid token.",
+        fp_mismatch:        "Device mismatch — please retry from GET KEY.",
+        device_mismatch:    "Device mismatch.",
       };
       showErr(msgs[data.error] || data.error);
       return;
     }
-    pendingRedeemData = { token, hmac, hours: data.hours };
+    saveSession(data.key, data.expiryMs);
+    localStorage.removeItem(STORE_COOL);
+    showKey(data.key, data.expiryMs);
     history.replaceState({}, "", location.pathname);
-    showRedeemInput(data.hours, data.expiresInSeconds, data.code);
   } catch(e) {
     showErr("Failed to connect — check your internet connection.");
   }
@@ -456,26 +345,62 @@ async function onClickGet(hours) {
   const sess = getSession();
   if(sess) { showActiveWarn(sess.expiryMs); return false; }
 
+  setLoading("PREPARING...", "Please wait a moment");
   try {
     const res  = await fetch(SERVER_URL + "?action=preflight", {
       method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({ fp: FP, hours: hours })
     });
     const data = await res.json();
-    if(!data.ok || !data.token || !data.hmac || !data.nonce) {
+    if(!data.ok || !data.token || !data.hmac) {
       showErr(data.error || "Failed to prepare. Try again.");
       return false;
     }
-    localStorage.removeItem("fn_pending");
+    // Simpan ke localStorage dengan expiry 5 menit
+    // sessionStorage tidak reliable di Android/WebView saat lintas redirect
+    localStorage.removeItem("fn_pending"); // clear data lama sebelum set baru
     localStorage.setItem("fn_pending", JSON.stringify({
-      token: data.token, hmac: data.hmac, hours: hours, nonce: data.nonce,
-      expiry: Date.now() + 5 * 60 * 1000
+      token: data.token, hmac: data.hmac, hours: hours,
+      expiry: Date.now() + 4.5 * 60 * 1000
     }));
-    // ✅ ANTI-BYPASS: Nonce di-embed ke URL Linkvertise sebagai custom param
-    // Linkvertise akan forward param ini ke URL redirect (GetKey/?landed=1&r=NONCE)
-    // User yang buka success page lama tidak punya nonce baru yang valid
-    const lvBase = hours === 6 ? LV_URL_6H : LV_URL_3H;
-    window.location.href = lvBase + "?r=" + data.nonce;
+
+    // Buka Linkvertise di popup — halaman utama tetap di sini
+    const lvUrl = hours === 6 ? LV_URL_6H : LV_URL_3H;
+    const popup = window.open(lvUrl, "lv_task", "width=480,height=700,scrollbars=yes,resizable=yes");
+
+    if (!popup || popup.closed || typeof popup.closed === "undefined") {
+      // Popup diblokir browser — fallback ke redirect biasa
+      window.location.href = lvUrl;
+      return false;
+    }
+
+    // Tampilkan status menunggu user selesai task
+    setLoading("WAITING FOR TASK...", "Complete the Linkvertise task in the popup");
+
+    // Polling: cek setiap 1.5 detik apakah popup sudah ditutup
+    const pollInterval = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(pollInterval);
+        // Popup ditutup — coba claim token
+        const raw = localStorage.getItem("fn_pending");
+        localStorage.removeItem("fn_pending");
+        if (raw) {
+          try {
+            const pd = JSON.parse(raw);
+            if (pd.token && pd.hmac && Date.now() < pd.expiry) {
+              claimToken(pd.token, pd.hmac, pd.hours || 3);
+              return;
+            }
+          } catch(e) {}
+        }
+        // Token hilang/expired
+        hideAll();
+        document.getElementById("s-get").style.display = "block";
+        const errEl = document.getElementById("st-err");
+        errEl.style.display = "block";
+        errEl.textContent = "Task not completed — please try again.";
+      }
+    }, 1500);
   } catch(e) {
     showErr("Failed to connect — check your internet connection.");
   }
@@ -501,18 +426,26 @@ window.addEventListener("load", () => {
 
   if(params.get("landed") === "1") {
     history.replaceState({}, "", location.pathname);
+
+    // Kalau halaman ini dibuka di dalam popup (dari flow baru),
+    // cukup tutup popup — parent window yang akan handle claim
+    if (window.opener && !window.opener.closed) {
+      window.close();
+      return;
+    }
+
+    // Fallback: kalau bukan popup (misal redirect biasa / mobile), claim di sini
     const raw = localStorage.getItem("fn_pending");
     localStorage.removeItem("fn_pending");
     if(raw) {
       try {
         const pd = JSON.parse(raw);
-        if(pd.token && pd.hmac && pd.nonce && Date.now() < pd.expiry) {
-          genCode(pd.token, pd.hmac, pd.hours || 3, pd.nonce);
+        if(pd.token && pd.hmac && Date.now() < pd.expiry) {
+          claimToken(pd.token, pd.hmac, pd.hours || 3);
           return;
         }
       } catch(e) {}
     }
-    // Pending hilang/expired — tampilkan tombol lagi, jangan error menakutkan
     hideAll();
     document.getElementById("s-get").style.display = "block";
     const errEl = document.getElementById("st-err");
@@ -521,9 +454,7 @@ window.addEventListener("load", () => {
     return;
   }
 
-  // Support flow lama (token di URL) — bisa dihapus nanti setelah semua migrasi
-  const token = params.get("token"), hmac = params.get("hmac");
-  if(token && hmac) { genCode(token, hmac); return; }
+  // ✅ FIX: Flow lama (token di URL) dihapus — rawan bypass
 
   const sess = getSession();
   if(sess) { showKey(sess.key, sess.expiryMs); return; }
